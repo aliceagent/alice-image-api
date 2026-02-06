@@ -70,6 +70,12 @@ def find_matching_images(images: list, weather: str, time_period: str, exclude_i
         if exclude_id and img.get('id') == exclude_id:
             continue
         
+        # SKIP HOLIDAY IMAGES - they should only appear on their actual holiday
+        # The main display handles holiday logic; change should only return regular images
+        holiday = img.get('holiday', '')
+        if holiday and holiday.strip():
+            continue
+        
         # Check weather match
         if weather and img.get('weather', '').lower() != weather.lower():
             continue
@@ -146,10 +152,11 @@ def select_different_image(images: list, context: dict, exclude_id: str = None) 
     if matches:
         return weighted_random_choice(matches)
     
-    # Ultimate fallback: any verified image with CDN URL
+    # Ultimate fallback: any verified non-holiday image with CDN URL
     all_verified = [img for img in images 
                     if img.get('cloudinary_url') and img.get('verified') 
-                    and img.get('id') != exclude_id]
+                    and img.get('id') != exclude_id
+                    and not (img.get('holiday') and img.get('holiday').strip())]
     if all_verified:
         return weighted_random_choice(all_verified)
     
