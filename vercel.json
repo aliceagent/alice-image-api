@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/**/*.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/image/rate",
+      "dest": "/api/image/rate.py"
+    },
+    {
+      "src": "/api/image/change",
+      "dest": "/api/image/change.py"
+    }
+  ],
+  "env": {
+    "NOTION_API_KEY": "@notion-api-key",
+    "GALLERY_DATABASE_ID": "2fc41906-4d30-8189-a748-c6b715faf485"
+  }
+}
