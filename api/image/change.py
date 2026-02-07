@@ -121,45 +121,73 @@ def weighted_random_choice(candidates: list) -> dict:
 
 
 def select_different_image(images: list, context: dict, exclude_id: str = None) -> dict:
-    """Select a different image matching context, with fallbacks"""
+    """Select a different image matching context, with fallbacks.
+    
+    IMPORTANT: Time period is prioritized over weather to prevent showing
+    daytime images at night (or vice versa).
+    """
     weather = context.get('weather', '')
     time_period = context.get('time_period', '')
+    
+    # Define time period groups for consistency
+    NIGHT_PERIODS = ['Night', 'Late Night', 'Clear Night']
+    DAY_PERIODS = ['Morning', 'Midday', 'Afternoon', 'Dawn', 'Early Morning']
+    TRANSITION_PERIODS = ['Evening', 'Golden Hour']
+    
+    def get_compatible_periods(period):
+        """Get time periods that are visually compatible"""
+        if period in NIGHT_PERIODS:
+            return NIGHT_PERIODS + ['Evening']  # Night can show evening
+        elif period in DAY_PERIODS:
+            return DAY_PERIODS + TRANSITION_PERIODS
+        elif period in TRANSITION_PERIODS:
+            return TRANSITION_PERIODS + DAY_PERIODS  # Evening prefers day over night
+        return [period]
+    
+    compatible_times = get_compatible_periods(time_period)
     
     # Try exact match first
     matches = find_matching_images(images, weather, time_period, exclude_id)
     if matches:
         return weighted_random_choice(matches)
     
-    # Try weather fallbacks
+    # Try weather fallbacks with SAME time period
     for fallback_weather in WEATHER_FALLBACKS.get(weather, []):
         matches = find_matching_images(images, fallback_weather, time_period, exclude_id)
         if matches:
             return weighted_random_choice(matches)
     
-    # Try time fallbacks
-    for fallback_time in TIME_FALLBACKS.get(time_period, []):
-        matches = find_matching_images(images, weather, fallback_time, exclude_id)
-        if matches:
-            return weighted_random_choice(matches)
-    
-    # Try any weather with same time
+    # Try any weather with SAME time period
     matches = find_matching_images(images, None, time_period, exclude_id)
     if matches:
         return weighted_random_choice(matches)
     
-    # Try any time with same weather
-    matches = find_matching_images(images, weather, None, exclude_id)
-    if matches:
-        return weighted_random_choice(matches)
+    # Try compatible time periods (e.g., Night can use Late Night)
+    for alt_time in compatible_times:
+        if alt_time != time_period:
+            # Try with original weather
+            matches = find_matching_images(images, weather, alt_time, exclude_id)
+            if matches:
+                return weighted_random_choice(matches)
+            # Try any weather
+            matches = find_matching_images(images, None, alt_time, exclude_id)
+            if matches:
+                return weighted_random_choice(matches)
     
-    # Ultimate fallback: any verified non-holiday image with CDN URL
-    all_verified = [img for img in images 
-                    if img.get('cloudinary_url') and img.get('verified') 
-                    and img.get('id') != exclude_id
-                    and not (img.get('holiday') and img.get('holiday').strip())]
-    if all_verified:
-        return weighted_random_choice(all_verified)
+    # STRICT: Only return images within compatible time groups
+    # This prevents showing daytime images at night
+    compatible_images = [
+        img for img in images 
+        if img.get('cloudinary_url') and img.get('verified') 
+        and img.get('id') != exclude_id
+        and not (img.get('holiday') and img.get('holiday').strip())
+        and img.get('time_period', '') in compatible_times
+    ]
+    if compatible_images:
+        return weighted_random_choice(compatible_images)
     
+    # Ultimate fallback: NO images rather than wrong time period
+    # User sees "no alternatives found" which is better than wrong images
     return None
 
 
