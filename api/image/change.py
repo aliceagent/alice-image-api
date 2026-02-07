@@ -123,16 +123,27 @@ def weighted_random_choice(candidates: list) -> dict:
 def select_different_image(images: list, context: dict, exclude_id: str = None) -> dict:
     """Select a different image matching context, with fallbacks.
     
-    IMPORTANT: Time period is prioritized over weather to prevent showing
-    daytime images at night (or vice versa).
+    IMPORTANT: During sleeping hours (Night/Late Night), ONLY return Sleeping
+    activity images to avoid showing daytime Work scenes at night.
     """
     weather = context.get('weather', '')
     time_period = context.get('time_period', '')
+    hour = context.get('hour', 12)  # Default to noon if not provided
     
     # Define time period groups for consistency
     NIGHT_PERIODS = ['Night', 'Late Night', 'Clear Night']
     DAY_PERIODS = ['Morning', 'Midday', 'Afternoon', 'Dawn', 'Early Morning']
     TRANSITION_PERIODS = ['Evening', 'Golden Hour']
+    
+    # Determine if we're in sleeping hours (22:00-05:00)
+    is_sleeping_hour = hour >= 22 or hour < 6
+    
+    def filter_by_activity(candidates, require_sleeping=False):
+        """Filter images by activity during sleeping hours"""
+        if not require_sleeping:
+            return candidates
+        # During sleeping hours, ONLY return Sleeping activity
+        return [img for img in candidates if img.get('activity', '').lower() == 'sleeping']
     
     def get_compatible_periods(period):
         """Get time periods that are visually compatible"""
@@ -146,6 +157,28 @@ def select_different_image(images: list, context: dict, exclude_id: str = None) 
     
     compatible_times = get_compatible_periods(time_period)
     
+    # SLEEPING HOURS SPECIAL HANDLING
+    # During 22:00-05:00, ONLY return Sleeping activity images
+    # This prevents showing Work/daytime scenes at night
+    if is_sleeping_hour:
+        sleeping_images = [
+            img for img in images
+            if img.get('cloudinary_url') and img.get('verified')
+            and img.get('id') != exclude_id
+            and not (img.get('holiday') and img.get('holiday').strip())
+            and img.get('activity', '').lower() == 'sleeping'
+        ]
+        if sleeping_images:
+            # Try to match weather if possible
+            weather_matched = [img for img in sleeping_images 
+                              if img.get('weather', '').lower() == weather.lower()]
+            if weather_matched:
+                return weighted_random_choice(weather_matched)
+            return weighted_random_choice(sleeping_images)
+        # No sleeping images available - return None rather than wrong activity
+        return None
+    
+    # NORMAL HOURS - standard time-based matching
     # Try exact match first
     matches = find_matching_images(images, weather, time_period, exclude_id)
     if matches:
