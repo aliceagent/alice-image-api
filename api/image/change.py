@@ -167,6 +167,7 @@ def select_different_image(images: list, context: dict, exclude_id: str = None) 
             and img.get('id') != exclude_id
             and not (img.get('holiday') and img.get('holiday').strip())
             and img.get('activity', '').lower() == 'sleeping'
+            and img.get('time_period', '') in compatible_times  # FIX: Filter by time period too!
         ]
         if sleeping_images:
             # Try to match weather if possible
@@ -175,6 +176,20 @@ def select_different_image(images: list, context: dict, exclude_id: str = None) 
             if weather_matched:
                 return weighted_random_choice(weather_matched)
             return weighted_random_choice(sleeping_images)
+        
+        # If no sleeping images for the exact time period, try any night-appropriate time
+        # but still require sleeping activity
+        fallback_sleeping_images = [
+            img for img in images
+            if img.get('cloudinary_url') and img.get('verified')
+            and img.get('id') != exclude_id
+            and not (img.get('holiday') and img.get('holiday').strip())
+            and img.get('activity', '').lower() == 'sleeping'
+            and img.get('time_period', '') in NIGHT_PERIODS + TRANSITION_PERIODS  # Only night/evening
+        ]
+        if fallback_sleeping_images:
+            return weighted_random_choice(fallback_sleeping_images)
+            
         # No sleeping images available - return None rather than wrong activity
         return None
     
